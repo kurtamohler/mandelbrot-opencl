@@ -3,6 +3,7 @@ Mandelbrot set viewing application with high frame-rate to enable real-time expl
 
 ## Dependencies
 * OpenCL
+* SFML
 * A compute device compatible with OpenCL (run clinfo to check)
 
 ## Build

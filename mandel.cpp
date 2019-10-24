@@ -44,9 +44,10 @@ public:
             true
         ),
         clQueue(clContext),
-        mandelbrot_kernel(clProgram, "mandel")
+        mandelbrot_kernel(clProgram, "mandel"),
+        view(window.getDefaultView())
     {
-        divergeMandelIters_device = cl::Buffer(
+        divergeMandelIters_device = new cl::Buffer(
             clContext,
             begin(divergeMandelIters_host),
             end(divergeMandelIters_host),
@@ -60,7 +61,7 @@ public:
                 cl::NDRange(totalPixels)
                 // ,16
             ),
-            divergeMandelIters_device,
+            *divergeMandelIters_device,
             xSize,
             ySize,
             xMin, xMax,  // x range
@@ -70,17 +71,18 @@ public:
     }
 
 
-
     bool WindowOpen() {
         return window.isOpen();
     }
 
     void GenerateFrame() {
+        static int color_add = 0;
+        color_add++;
         PollEvents();
 
         cl::copy(
             clQueue,
-            divergeMandelIters_device,
+            *divergeMandelIters_device,
             begin(divergeMandelIters_host),
             end(divergeMandelIters_host)
         );
@@ -91,7 +93,7 @@ public:
                 cl::NDRange(totalPixels)
                 // ,16
             ),
-            divergeMandelIters_device,
+            *divergeMandelIters_device,
             xSize,
             ySize,
             xMin, xMax,  // x range
@@ -112,10 +114,13 @@ public:
                 float point_val = divergeMandelIters_host[x + y * xSize];
 
                 float r_val = 0;
+                float g_val = 0;
                 float b_val = 0;
 
                 if (point_val > 0) {
+                    point_val += ((float) color_add);
                     r_val = 127.0f + 127.0f * sin(point_val * 2 * PI * max_loops_recip);
+                    g_val = 127.0f + 127.0f * sin((point_val + color_add) * 0.02f);
                     b_val = ((float)maxMandelIters) - r_val;
                 }
 
@@ -123,7 +128,7 @@ public:
                     sf::Vector2f(x,y),
                     sf::Color(
                         r_val,
-                        0,
+                        g_val,
                         b_val,
                         255
                     )
@@ -146,11 +151,45 @@ private:
 
             } else if (event.type == sf::Event::MouseWheelScrolled) {
                 ApplyScrollZoom(event.mouseWheelScroll.delta);
+
             } else if (event.type == sf::Event::KeyPressed) {
                 ApplyKeyPan(event.key);
+
+            // } else if (event.type == sf::Event::Resized) {
+            //     Resize(event.size.width, event.size.height);
             }
         }
     }
+
+    /*
+    void Resize(unsigned int xNew, unsigned int yNew) {
+        xSize = xNew;
+        ySize = yNew;
+        totalPixels = xNew * yNew;
+
+        divergeMandelIters_host.resize(totalPixels);
+
+        delete divergeMandelIters_device;
+
+        divergeMandelIters_device = new cl::Buffer(
+            clContext,
+            begin(divergeMandelIters_host),
+            end(divergeMandelIters_host),
+            true
+        );
+
+
+        view.setSize({
+            static_cast<float>(xNew),
+            static_cast<float>(yNew)
+        });
+        window.setView(view);
+ 
+
+        cout << xNew << ", " << yNew << endl;
+
+    }
+    */
 
     void ApplyScrollZoom(float delta) {
         float xDelta = (delta/10.0f) * (xMax - xMin);
@@ -197,7 +236,7 @@ private:
     // The number of mandelbrot iterations it takes for each pixel to diverge.
     // Zero indicates that the pixel did not diverge in the allotted time.
     vector<float> divergeMandelIters_host;
-    cl::Buffer divergeMandelIters_device;
+    cl::Buffer* divergeMandelIters_device;
 
     cl::Context clContext;
     cl::Program clProgram;
@@ -216,12 +255,14 @@ private:
 
     sf::RenderWindow window;
     sf::VertexArray points;
+    sf::View view;
 
     util::Timer frameTimer;
 
     int totalFrames = 0;
 
-    unsigned int maxMandelIters = 1024;
+    // unsigned int maxMandelIters = 1024;
+    unsigned int maxMandelIters = 2048;
     // unsigned int maxMandelIters = 128;
 
     float xMin = -2 * (1920.0f/1080.0f);

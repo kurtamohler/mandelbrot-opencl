@@ -146,16 +146,48 @@ private:
 
             } else if (event.type == sf::Event::MouseWheelScrolled) {
                 ApplyScrollZoom(event.mouseWheelScroll.delta);
+            } else if (event.type == sf::Event::KeyPressed) {
+                ApplyKeyPan(event.key);
             }
         }
     }
 
     void ApplyScrollZoom(float delta) {
-        xMin -= (delta/10.0f) * xMin;
-        xMax -= (delta/10.0f) * xMax;
+        float xDelta = (delta/10.0f) * (xMax - xMin);
+        float yDelta = (delta/10.0f) * (yMax - yMin);
 
-        yMin -= (delta/10.0f) * yMin;
-        yMax -= (delta/10.0f) * yMax;
+        xMin += xDelta;
+        xMax -= xDelta;
+
+        yMin += yDelta;
+        yMax -= yDelta;
+
+        cout << (xMax - xMin) << endl;
+    }
+
+    void ApplyKeyPan(sf::Event::KeyEvent key) {
+        float factor = 0.03f;
+        float xDelta = factor * (xMax - xMin);
+        float yDelta = factor * (yMax - yMin);
+
+        if (key.code == sf::Keyboard::A) {
+            xMin -= xDelta;
+            xMax -= xDelta;
+
+        } else if (key.code == sf::Keyboard::D) {
+            xMin += xDelta;
+            xMax += xDelta;
+
+        } else if (key.code == sf::Keyboard::W) {
+            yMin -= yDelta;
+            yMax -= yDelta;
+
+        } else if (key.code == sf::Keyboard::S) {
+            yMin += yDelta;
+            yMax += yDelta;
+
+        }
+
     }
 
     unsigned int xSize;
@@ -190,11 +222,12 @@ private:
     int totalFrames = 0;
 
     unsigned int maxMandelIters = 1024;
+    // unsigned int maxMandelIters = 128;
 
-    float xMin = -2;
-    float xMax = 1;
-    float yMin = -1;
-    float yMax = 1;
+    float xMin = -2 * (1920.0f/1080.0f);
+    float xMax = 2 * (1920.0f/1080.0f);
+    float yMin = -2;
+    float yMax = 2;
 };
 
 

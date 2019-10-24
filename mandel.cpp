@@ -21,212 +21,191 @@
 
 #define PI 3.14159265
 
-// #define ROWS 51
-// #define COLS 101
-
-
 using namespace std;
 
-
-void test_various_loops() {
-
-}
-
-int main() {
-    unsigned int x_size = 1920/2;
-    unsigned int y_size = 1080/2;
-
-    // unsigned int x_size = 101;
-    // unsigned int y_size = 51;
-
-    unsigned int total_pixels = x_size * y_size;
-
-    vector<float> h_mandel_frame(total_pixels, 0);
-    cl::Buffer d_mandel_frame;
-
-    sf::RenderWindow window(
-        sf::VideoMode(x_size, y_size),
-        "OpenCL Mandelbrot"
-    );
-
-    float sum_fps = 0;
-
-    int total_frames = 0;
-
-    try {
-        cl::Context context(DEVICE);
-        cl::Program program(
-            context,
+class MandelbrotCL {
+public:
+    MandelbrotCL(
+        unsigned int xSize,
+        unsigned int ySize
+    ) :
+        xSize(xSize),
+        ySize(ySize),
+        totalPixels(xSize * ySize),
+        divergeMandelIters_host(totalPixels, 0),
+        window(
+            sf::VideoMode(xSize, ySize),
+            "OpenCL Mandelbrot"
+        ),
+        clContext(DEVICE),
+        clProgram(
+            clContext,
             util::loadProgram("mandel.cl"),
             true
-        );
-
-        cl::CommandQueue queue(context);
-
-
-        size_t max_workgroup_size = 512;
-        // dev->getInfo(CL_DEVICE_MAX_WORK_GROUP_SIZE, &max_workgroup_size);
-
-        // Create the kernel functor
-        auto mandel = cl::make_kernel<
-            cl::Buffer,
-            unsigned int,
-            unsigned int,
-            float,
-            float,
-            float,
-            float,
-            unsigned int
-        >(program, "mandel");
-
-        d_mandel_frame = cl::Buffer(
-            context,
-            begin(h_mandel_frame),
-            end(h_mandel_frame),
+        ),
+        clQueue(clContext),
+        mandelbrot_kernel(clProgram, "mandel")
+    {
+        divergeMandelIters_device = cl::Buffer(
+            clContext,
+            begin(divergeMandelIters_host),
+            end(divergeMandelIters_host),
             true
         );
 
-        unsigned int max_loops = 1024;
-        unsigned int max_samples = 10;
-
-
-        // Fully zoomed out to show all of the points not in the set
-        // float x_min = -2.7;
-        // float x_max = 0.3;
-        // float y_min = -1.98   - 0.005;
-        // float y_max = 0.02    + 0.005;
-
-
-
-        float x_min = -2;
-        float x_max = 1;
-        float y_min = -1;
-        float y_max = 1;
-
-
-        // Close to worst case performance if in range where no point is
-        // in the mandelbrot set
-        // float x_min = -0;
-        // float x_max = 0.1;
-        // float y_min = -0.01;
-        // float y_max = 0.01;
-
-        mandel(
+        // Get the first frame started right off the bat
+        mandelbrot_kernel(
             cl::EnqueueArgs(
-                queue,
-                cl::NDRange(total_pixels)
+                clQueue,
+                cl::NDRange(totalPixels)
                 // ,16
             ),
-            d_mandel_frame,
-            x_size,
-            y_size,
-            x_min, x_max,  // x range
-            y_min, y_max,  // y range
-            max_loops
+            divergeMandelIters_device,
+            xSize,
+            ySize,
+            xMin, xMax,  // x range
+            yMin, yMax,  // y range
+            maxMandelIters
+        );
+    }
+
+
+
+    bool WindowOpen() {
+        return window.isOpen();
+    }
+
+    void GenerateFrame() {
+        PollEvents();
+
+        cl::copy(
+            clQueue,
+            divergeMandelIters_device,
+            begin(divergeMandelIters_host),
+            end(divergeMandelIters_host)
         );
 
-        util::Timer timer;
+        mandelbrot_kernel(
+            cl::EnqueueArgs(
+                clQueue,
+                cl::NDRange(totalPixels)
+                // ,16
+            ),
+            divergeMandelIters_device,
+            xSize,
+            ySize,
+            xMin, xMax,  // x range
+            yMin, yMax,  // y range
+            maxMandelIters
+        );
 
-        while (window.isOpen()) {
-            sf::Event event;
-            while (window.pollEvent(event)) {
-                if (event.type == sf::Event::Closed)
-                    window.close();
-            }
+        window.clear();
+        points.clear();
 
+        float max_loops_recip = 8.0f / ((float) maxMandelIters);
 
-            cl::copy(
-                queue,
-                d_mandel_frame,
-                begin(h_mandel_frame),
-                end(h_mandel_frame)
-            );
+        for (int y = 0; y < ySize; y++) {
 
-            // queue.finish();
-
-            mandel(
-                cl::EnqueueArgs(
-                    queue,
-                    cl::NDRange(total_pixels)
-                    ,16
-                ),
-                d_mandel_frame,
-                x_size,
-                y_size,
-                x_min, x_max,  // x range
-                y_min, y_max,  // y range
-                max_loops
-            );
-
-            window.clear();
-
-            float max_loops_recip = 8.0f / ((float) max_loops);
-
-            sf::VertexArray points;
-            for (int y = 0; y < y_size; y++) {
-
-                for (int x = 0; x < x_size; x++) {
+            for (int x = 0; x < xSize; x++) {
 
 
-                    float point_val = h_mandel_frame[x + y * x_size];
+                float point_val = divergeMandelIters_host[x + y * xSize];
 
-                    float r_val = 0;
-                    float b_val = 0;
+                float r_val = 0;
+                float b_val = 0;
 
-                    if (point_val > 0) {
-                        r_val = 127.0f + 127.0f * sin(point_val * 2 * PI * max_loops_recip);
-                        b_val = ((float)max_loops) - r_val;
-                    }
-
-                    points.append(sf::Vertex(
-                        sf::Vector2f(x,y),
-                        sf::Color(
-                            r_val,
-                            0,
-                            b_val,
-                            255
-                        )
-                    ));
+                if (point_val > 0) {
+                    r_val = 127.0f + 127.0f * sin(point_val * 2 * PI * max_loops_recip);
+                    b_val = ((float)maxMandelIters) - r_val;
                 }
+
+                points.append(sf::Vertex(
+                    sf::Vector2f(x,y),
+                    sf::Color(
+                        r_val,
+                        0,
+                        b_val,
+                        255
+                    )
+                ));
             }
-            window.draw(points);
-            window.display();
-
-
-
-
-
-            // FPS calculation
-            double runtime = static_cast<double>(timer.getTimeMilliseconds()) / 1000.0;
-            timer.reset();
-
-            double fps = 1.0 / runtime;
-            // cout << fps << " fps" << endl;
-
-            if (total_frames > 10) {
-                sum_fps += fps;
-            }
-            total_frames++;
-
-
-
-            // if (x_min < 0.299983f) {
-            //     x_min = x_max - 0.99f * (x_max - x_min);
-            //     y_min = y_max - 0.99f * (y_max - y_min);
-            // } else {
-            //     break;
-            // }
-
-            // if (total_frames >= 50) {
-            //     break;
-            // }
         }
 
-        double avg_fps = sum_fps / ((double) (total_frames-10));
-        cout << "Average fps: " << avg_fps << endl;
-        double ns_per_pixel = 1000000000.0 / (x_size * y_size * sum_fps);
-        cout << "ns per pixel: " << ns_per_pixel << endl;
+        window.draw(points);
+        window.display();
+    }
 
+
+private:
+
+    bool PollEvents() {
+        sf::Event event;
+        while (window.pollEvent(event)) {
+            if (event.type == sf::Event::Closed) {
+                window.close();
+            }
+        }
+    }
+
+    unsigned int xSize;
+    unsigned int ySize;
+    unsigned int totalPixels;
+
+    // The number of mandelbrot iterations it takes for each pixel to diverge.
+    // Zero indicates that the pixel did not diverge in the allotted time.
+    vector<float> divergeMandelIters_host;
+    cl::Buffer divergeMandelIters_device;
+
+    cl::Context clContext;
+    cl::Program clProgram;
+    cl::CommandQueue clQueue;
+
+    cl::make_kernel<
+        cl::Buffer,
+        unsigned int,
+        unsigned int,
+        float,
+        float,
+        float,
+        float,
+        unsigned int
+    > mandelbrot_kernel;
+
+    sf::RenderWindow window;
+    sf::VertexArray points;
+
+    util::Timer frameTimer;
+
+    int totalFrames = 0;
+
+    unsigned int maxMandelIters = 1024;
+
+    float xMin = -2;
+    float xMax = 1;
+    float yMin = -1;
+    float yMax = 1;
+};
+
+
+int main() {
+    unsigned int xSize = 1920/2;
+    unsigned int ySize = 1080/2;
+
+    try {
+        MandelbrotCL mandelbrot(xSize, ySize);
+
+        unsigned int numFrames = 0;
+        util::Timer timer;
+
+        while (mandelbrot.WindowOpen()) {
+            mandelbrot.GenerateFrame();
+            numFrames++;
+        }
+
+        double runtimeSeconds = static_cast<double>(timer.getTimeMilliseconds()) / 1000.0;
+        double avgFps = ((float)numFrames) / runtimeSeconds;
+
+        cout << "FPS: " << avgFps << endl;
 
     } catch (cl::Error err) {
         cout << "Exception" << endl;

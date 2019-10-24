@@ -143,8 +143,19 @@ private:
         while (window.pollEvent(event)) {
             if (event.type == sf::Event::Closed) {
                 window.close();
+
+            } else if (event.type == sf::Event::MouseWheelScrolled) {
+                ApplyScrollZoom(event.mouseWheelScroll.delta);
             }
         }
+    }
+
+    void ApplyScrollZoom(float delta) {
+        xMin -= (delta/10.0f) * xMin;
+        xMax -= (delta/10.0f) * xMax;
+
+        yMin -= (delta/10.0f) * yMin;
+        yMax -= (delta/10.0f) * yMax;
     }
 
     unsigned int xSize;
@@ -199,6 +210,7 @@ int main() {
 
         while (mandelbrot.WindowOpen()) {
             mandelbrot.GenerateFrame();
+
             numFrames++;
         }
 

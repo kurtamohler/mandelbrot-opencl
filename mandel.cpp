@@ -17,7 +17,7 @@
 #endif
 
 
-#define TOL (0.001)     // tolerance used in float compare
+#define TOL (0.001)     // tolerance used in double compare
 
 #define PI 3.14159265
 
@@ -104,24 +104,24 @@ public:
         window.clear();
         points.clear();
 
-        float max_loops_recip = 8.0f / ((float) maxMandelIters);
+        double max_loops_recip = 8.0f / ((double) maxMandelIters);
 
         for (int y = 0; y < ySize; y++) {
 
             for (int x = 0; x < xSize; x++) {
 
 
-                float point_val = divergeMandelIters_host[x + y * xSize];
+                double point_val = divergeMandelIters_host[x + y * xSize];
 
-                float r_val = 0;
-                float g_val = 0;
-                float b_val = 0;
+                double r_val = 0;
+                double g_val = 0;
+                double b_val = 0;
 
                 if (point_val > 0) {
-                    point_val += ((float) color_add);
+                    point_val += ((double) color_add);
                     r_val = 127.0f + 127.0f * sin(point_val * 2 * PI * max_loops_recip);
                     g_val = 127.0f + 127.0f * sin((point_val + color_add) * 0.02f);
-                    b_val = ((float)maxMandelIters) - r_val;
+                    b_val = ((double)maxMandelIters) - r_val;
                 }
 
                 points.append(sf::Vertex(
@@ -180,8 +180,8 @@ private:
 
 
         view.setSize({
-            static_cast<float>(xNew),
-            static_cast<float>(yNew)
+            static_cast<double>(xNew),
+            static_cast<double>(yNew)
         });
         window.setView(view);
  
@@ -191,9 +191,9 @@ private:
     }
     */
 
-    void ApplyScrollZoom(float delta) {
-        float xDelta = (delta/10.0f) * (xMax - xMin);
-        float yDelta = (delta/10.0f) * (yMax - yMin);
+    void ApplyScrollZoom(double delta) {
+        double xDelta = (delta/10.0f) * (xMax - xMin);
+        double yDelta = (delta/10.0f) * (yMax - yMin);
 
         xMin += xDelta;
         xMax -= xDelta;
@@ -205,9 +205,9 @@ private:
     }
 
     void ApplyKeyPan(sf::Event::KeyEvent key) {
-        float factor = 0.03f;
-        float xDelta = factor * (xMax - xMin);
-        float yDelta = factor * (yMax - yMin);
+        double factor = 0.03f;
+        double xDelta = factor * (xMax - xMin);
+        double yDelta = factor * (yMax - yMin);
 
         if (key.code == sf::Keyboard::A) {
             xMin -= xDelta;
@@ -235,7 +235,7 @@ private:
 
     // The number of mandelbrot iterations it takes for each pixel to diverge.
     // Zero indicates that the pixel did not diverge in the allotted time.
-    vector<float> divergeMandelIters_host;
+    vector<double> divergeMandelIters_host;
     cl::Buffer* divergeMandelIters_device;
 
     cl::Context clContext;
@@ -246,10 +246,10 @@ private:
         cl::Buffer,
         unsigned int,
         unsigned int,
-        float,
-        float,
-        float,
-        float,
+        double,
+        double,
+        double,
+        double,
         unsigned int
     > mandelbrot_kernel;
 
@@ -262,13 +262,13 @@ private:
     int totalFrames = 0;
 
     // unsigned int maxMandelIters = 1024;
-    unsigned int maxMandelIters = 2048;
+    unsigned int maxMandelIters = 2048/4;
     // unsigned int maxMandelIters = 128;
 
-    float xMin = -2 * (1920.0f/1080.0f);
-    float xMax = 2 * (1920.0f/1080.0f);
-    float yMin = -2;
-    float yMax = 2;
+    double xMin = -2 * (1920.0f/1080.0f);
+    double xMax = 2 * (1920.0f/1080.0f);
+    double yMin = -2;
+    double yMax = 2;
 };
 
 
@@ -289,7 +289,7 @@ int main() {
         }
 
         double runtimeSeconds = static_cast<double>(timer.getTimeMilliseconds()) / 1000.0;
-        double avgFps = ((float)numFrames) / runtimeSeconds;
+        double avgFps = ((double)numFrames) / runtimeSeconds;
 
         cout << "FPS: " << avgFps << endl;
 

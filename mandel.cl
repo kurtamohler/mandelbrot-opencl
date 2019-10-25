@@ -9,13 +9,13 @@
 // corresponds to col 0 row 0, and mandel_buffer[1] corresponds
 // to col 1 row 0.
 __kernel void mandel(
-    __global float* mandel_frame,
+    __global double* mandel_frame,
     const unsigned int x_size,
     const unsigned int y_size,
-    const float x_min,
-    const float x_max,
-    const float y_min,
-    const float y_max,
+    const double x_min,
+    const double x_max,
+    const double y_min,
+    const double y_max,
     const unsigned int max_loops
 ) {
     int i = get_global_id(0);
@@ -27,23 +27,23 @@ __kernel void mandel(
         int y = i / x_size;
 
         // Map col and row numbers to value between 0 and 1
-        float x_ratio = ((float) x) / ((float) (x_size-1));
-        float y_ratio = ((float) y) / ((float) (y_size-1));
+        double x_ratio = ((double) x) / ((double) (x_size-1));
+        double y_ratio = ((double) y) / ((double) (y_size-1));
 
-        float c_real = x_min + x_ratio * (x_max - x_min);
-        float c_imm = y_min + y_ratio * (y_max - y_min);
+        double c_real = x_min + x_ratio * (x_max - x_min);
+        double c_imm = y_min + y_ratio * (y_max - y_min);
 
-        float c_real_start = c_real;
-        float c_imm_start = c_imm;
+        double c_real_start = c_real;
+        double c_imm_start = c_imm;
 
         bool in_set = false;
-        float divergence_count_smoothed = 0;
+        double divergence_count_smoothed = 0;
 
-        float c_real_squ;
-        float c_imm_squ;
-        float c_mag_squ;
+        double c_real_squ;
+        double c_imm_squ;
+        double c_mag_squ;
 
-        float c_imm_new;
+        double c_imm_new;
 
         unsigned int loop_num = 1;
 
@@ -58,10 +58,11 @@ __kernel void mandel(
                 if (((c_mag_squ) > 4) && !in_set) {
                     in_set = true;
                     divergence_count_smoothed =
-                        (float)loop_num - log2(0.5f * log(c_mag_squ));
+                        (double)loop_num - log2(0.5f * log((float)c_mag_squ));
+                        // loop_num;
                 }
 
-                c_imm_new = c_imm_start + 2.0f*c_real*c_imm;
+                c_imm_new = c_imm_start + 2.0*c_real*c_imm;
                 c_real = c_real_start + c_real_squ - c_imm_squ;
                 c_imm = c_imm_new;
 

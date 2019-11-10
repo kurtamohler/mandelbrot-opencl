@@ -17,7 +17,7 @@
 #endif
 
 
-#define TOL (0.001)     // tolerance used in double compare
+#define TOL (0.001)     // tolerance used in float compare
 
 #define PI 3.14159265
 
@@ -45,12 +45,22 @@ public:
         ),
         clQueue(clContext),
         mandelbrot_kernel(clProgram, "mandel"),
+        mandelbrot_color_kernel(clProgram, "mandel_color"),
         view(window.getDefaultView())
     {
         divergeMandelIters_device = new cl::Buffer(
             clContext,
             begin(divergeMandelIters_host),
             end(divergeMandelIters_host),
+            true
+        );
+
+        InitPoints();
+
+        pixelColors_device = new cl::Buffer(
+            clContext,
+            begin(pixelColors_host),
+            end(pixelColors_host),
             true
         );
 
@@ -68,6 +78,20 @@ public:
             yMin, yMax,  // y range
             maxMandelIters
         );
+
+        mandelbrot_color_kernel(
+            cl::EnqueueArgs(
+                clQueue,
+                cl::NDRange(totalPixels)
+            ),
+            *divergeMandelIters_device,
+            *pixelColors_device,
+            xSize,
+            ySize,
+            0,
+            maxMandelIters
+        );
+
     }
 
 
@@ -75,17 +99,36 @@ public:
         return window.isOpen();
     }
 
+    void InitPoints() {
+        points.resize(totalPixels);
+        pixelColors_host.resize(totalPixels);
+        // pixelColors_host = new sf::Color[totalPixels];
+
+        int point_ind = 0;
+
+        for (int y = 0; y < ySize; y++) {
+            for (int x = 0; x < xSize; x++) {
+                points[point_ind] = sf::Vertex(
+                    sf::Vector2f(x,y),
+                    pixelColors_host[point_ind]
+                );
+                point_ind++;
+            }
+        }
+    }
+
     void GenerateFrame() {
-        static int color_add = 0;
+        static unsigned int color_add = 0;
         color_add++;
         PollEvents();
 
         cl::copy(
             clQueue,
-            *divergeMandelIters_device,
-            begin(divergeMandelIters_host),
-            end(divergeMandelIters_host)
+            *pixelColors_device,
+            begin(pixelColors_host),
+            end(pixelColors_host)
         );
+
 
         mandelbrot_kernel(
             cl::EnqueueArgs(
@@ -101,38 +144,27 @@ public:
             maxMandelIters
         );
 
+        mandelbrot_color_kernel(
+            cl::EnqueueArgs(
+                clQueue,
+                cl::NDRange(totalPixels)
+            ),
+            *divergeMandelIters_device,
+            *pixelColors_device,
+            xSize,
+            ySize,
+            color_add,
+            maxMandelIters
+        );
+
         window.clear();
-        points.clear();
+        int point_ind = 0;
 
-        double max_loops_recip = 8.0f / ((double) maxMandelIters);
-
+        // for (int point_ind = 0; point_ind < totalPixels; point_ind++) {
         for (int y = 0; y < ySize; y++) {
-
             for (int x = 0; x < xSize; x++) {
-
-
-                double point_val = divergeMandelIters_host[x + y * xSize];
-
-                double r_val = 0;
-                double g_val = 0;
-                double b_val = 0;
-
-                if (point_val > 0) {
-                    point_val += ((double) color_add);
-                    r_val = 127.0f + 127.0f * sin(point_val * 2 * PI * max_loops_recip);
-                    g_val = 127.0f + 127.0f * sin((point_val + color_add) * 0.02f);
-                    b_val = ((double)maxMandelIters) - r_val;
-                }
-
-                points.append(sf::Vertex(
-                    sf::Vector2f(x,y),
-                    sf::Color(
-                        r_val,
-                        g_val,
-                        b_val,
-                        255
-                    )
-                ));
+                points[point_ind].color = pixelColors_host[point_ind];
+                point_ind++;
             }
         }
 
@@ -166,6 +198,7 @@ private:
         xSize = xNew;
         ySize = yNew;
         totalPixels = xNew * yNew;
+        points.resize(totalPixels);
 
         divergeMandelIters_host.resize(totalPixels);
 
@@ -180,8 +213,8 @@ private:
 
 
         view.setSize({
-            static_cast<double>(xNew),
-            static_cast<double>(yNew)
+            static_cast<float>(xNew),
+            static_cast<float>(yNew)
         });
         window.setView(view);
  
@@ -191,9 +224,9 @@ private:
     }
     */
 
-    void ApplyScrollZoom(double delta) {
-        double xDelta = (delta/10.0f) * (xMax - xMin);
-        double yDelta = (delta/10.0f) * (yMax - yMin);
+    void ApplyScrollZoom(float delta) {
+        float xDelta = (delta/10.0f) * (xMax - xMin);
+        float yDelta = (delta/10.0f) * (yMax - yMin);
 
         xMin += xDelta;
         xMax -= xDelta;
@@ -205,9 +238,9 @@ private:
     }
 
     void ApplyKeyPan(sf::Event::KeyEvent key) {
-        double factor = 0.03f;
-        double xDelta = factor * (xMax - xMin);
-        double yDelta = factor * (yMax - yMin);
+        float factor = 0.03f;
+        float xDelta = factor * (xMax - xMin);
+        float yDelta = factor * (yMax - yMin);
 
         if (key.code == sf::Keyboard::A) {
             xMin -= xDelta;
@@ -235,8 +268,10 @@ private:
 
     // The number of mandelbrot iterations it takes for each pixel to diverge.
     // Zero indicates that the pixel did not diverge in the allotted time.
-    vector<double> divergeMandelIters_host;
+    vector<float> divergeMandelIters_host;
     cl::Buffer* divergeMandelIters_device;
+    vector<sf::Color> pixelColors_host;
+    cl::Buffer* pixelColors_device;
 
     cl::Context clContext;
     cl::Program clProgram;
@@ -246,12 +281,21 @@ private:
         cl::Buffer,
         unsigned int,
         unsigned int,
-        double,
-        double,
-        double,
-        double,
+        float,
+        float,
+        float,
+        float,
         unsigned int
     > mandelbrot_kernel;
+
+    cl::make_kernel<
+        cl::Buffer,
+        cl::Buffer,
+        unsigned int,
+        unsigned int,
+        unsigned int,
+        unsigned int
+    > mandelbrot_color_kernel;
 
     sf::RenderWindow window;
     sf::VertexArray points;
@@ -262,19 +306,19 @@ private:
     int totalFrames = 0;
 
     // unsigned int maxMandelIters = 1024;
-    unsigned int maxMandelIters = 2048/4;
+    unsigned int maxMandelIters = 2048;
     // unsigned int maxMandelIters = 128;
 
-    double xMin = -2 * (1920.0f/1080.0f);
-    double xMax = 2 * (1920.0f/1080.0f);
-    double yMin = -2;
-    double yMax = 2;
+    float xMin = -2 * (1920.0f/1080.0f);
+    float xMax = 2 * (1920.0f/1080.0f);
+    float yMin = -2;
+    float yMax = 2;
 };
 
 
 int main() {
-    unsigned int xSize = 1920/2;
-    unsigned int ySize = 1080/2;
+    unsigned int xSize = 2*1920/3;
+    unsigned int ySize = 2*1080/3;
 
     try {
         MandelbrotCL mandelbrot(xSize, ySize);
@@ -288,8 +332,8 @@ int main() {
             numFrames++;
         }
 
-        double runtimeSeconds = static_cast<double>(timer.getTimeMilliseconds()) / 1000.0;
-        double avgFps = ((double)numFrames) / runtimeSeconds;
+        float runtimeSeconds = static_cast<float>(timer.getTimeMilliseconds()) / 1000.0;
+        float avgFps = ((float)numFrames) / runtimeSeconds;
 
         cout << "FPS: " << avgFps << endl;
 

@@ -145,6 +145,8 @@
 #ifndef CL_HPP_
 #define CL_HPP_
 
+#include <iostream>
+
 #ifdef _WIN32
 
 #include <windows.h>
@@ -4695,6 +4697,31 @@ public:
                 "",
                 NULL,
                 NULL);
+
+            if (error != CL_SUCCESS) {
+                const int logSize = 10000;
+                char log[logSize];
+                cl_device_id devices[10];
+
+                clGetContextInfo(
+                    context(),
+                    CL_CONTEXT_DEVICES,
+                    10,
+                    devices,
+                    NULL
+                );
+
+                clGetProgramBuildInfo(
+                    object_,
+                    devices[0],
+                    CL_PROGRAM_BUILD_LOG,
+                    logSize,
+                    (void*)log,
+                    NULL
+                );
+
+                std::cout << log << std::endl;
+            }
 
             detail::errHandler(error, __BUILD_PROGRAM_ERR);
         }
